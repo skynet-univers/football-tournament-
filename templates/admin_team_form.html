@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Team{% endblock %}
+
+{% block content %}
+<style>
+  .admin-field label { display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px; }
+  .admin-field input, .admin-field select {
+    width:100%; padding:10px 12px; border-radius:var(--radius-sm);
+    border:1px solid var(--border-soft); background:var(--bg-card);
+    color:var(--text-primary); font-family:var(--font-body);
+  }
+  .admin-field input[type="color"] { padding:4px; height:44px; }
+</style>
+
+<section class="page-header container reveal">
+  <h1>{{ action }} Team</h1>
+</section>
+
+<section class="container reveal">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin-bottom:20px;">
+        {% for category, msg in messages %}
+          <p style="padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:8px;
+                    background: rgba(230,72,72,0.12); color: var(--red-500);">
+            {{ msg }}
+          </p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="glass" style="padding:28px; border-radius:var(--radius-lg); max-width:560px;">
+    <form method="POST">
+      <div class="admin-field" style="margin-bottom:16px;">
+        <label>Team Name</label>
+        <input type="text" name="name" required value="{{ team.name if team else '' }}">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div class="admin-field">
+          <label>Short Name</label>
+          <input type="text" name="short_name" required value="{{ team.short_name if team else '' }}">
+        </div>
+        <div class="admin-field">
+          <label>City</label>
+          <input type="text" name="city" required value="{{ team.city if team else '' }}">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
+        <div class="admin-field">
+          <label>Initials (max 4)</label>
+          <input type="text" name="initials" maxlength="4" required value="{{ team.initials if team else '' }}">
+        </div>
+        <div class="admin-field">
+          <label>Primary Color</label>
+          <input type="color" name="primary_color" value="{{ team.primary_color if team else '#1fae5f' }}">
+        </div>
+        <div class="admin-field">
+          <label>Secondary Color</label>
+          <input type="color" name="secondary_color" value="{{ team.secondary_color if team else '#0a0e0c' }}">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px;">
+        <button type="submit" class="btn btn-primary">{{ action }} Team</button>
+        <a href="{{ url_for('admin_teams') }}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

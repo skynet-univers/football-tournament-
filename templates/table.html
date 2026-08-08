@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Table{% endblock %}
+
+{% block content %}
+
+<section class="page-header container reveal">
+  <h1>League Table</h1>
+  <p class="section-sub">Sorted automatically by Points → Goal Difference → Goals Scored.</p>
+</section>
+
+<section class="container reveal">
+  <div class="glass table-wrap full-table-wrap">
+    <table class="full-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th class="team-col">Team</th>
+          <th>P</th>
+          <th>W</th>
+          <th>D</th>
+          <th>L</th>
+          <th>GF</th>
+          <th>GA</th>
+          <th>GD</th>
+          <th>Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in standings %}
+        <tr class="{{ 'rank-top' if row.position <= 3 }}">
+          <td class="pos-cell">
+            <span class="pos-num">{{ row.position }}</span>
+          </td>
+          <td class="team-col">
+            <div class="team-cell">
+              <div class="team-crest" style="--crest-color:{{ row.primary_color }}">{{ row.initials }}</div>
+              <div class="team-cell-text">
+                <span class="team-full-name">{{ row.name }}</span>
+                <span class="team-short-name">{{ row.short_name }}</span>
+              </div>
+            </div>
+          </td>
+          <td>{{ row.played }}</td>
+          <td>{{ row.won }}</td>
+          <td>{{ row.draw }}</td>
+          <td>{{ row.lost }}</td>
+          <td>{{ row.gf }}</td>
+          <td>{{ row.ga }}</td>
+          <td class="{{ 'pos' if row.gd > 0 else 'neg' if row.gd < 0 }}">
+            {{ '+' if row.gd > 0 }}{{ row.gd }}
+          </td>
+          <td class="pts">{{ row.points }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty-state">No standings available yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-legend">
+    <span><i class="legend-dot rank-top-dot"></i> Top of the table</span>
+    <span>P = Played, W = Won, D = Draw, L = Lost</span>
+    <span>GF = Goals For, GA = Goals Against, GD = Goal Difference</span>
+  </div>
+</section>
+
+{% endblock %}

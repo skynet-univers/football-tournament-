@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}J F League{% endblock %} | J F League</title>
+  <meta name="description" content="Japia Football League — India's premier football tournament. Live scores, fixtures, standings and stats." />
+
+  <!-- Google Fonts: display font for headings, clean sans for body -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>" />
+</head>
+<body>
+
+  <!-- ===================== Loading Screen ===================== -->
+  <div id="loader" class="loader">
+    <div class="loader-ball"></div>
+    <p class="loader-text">JAPIA FOOTBALL <span>LEAGUE</span></p>
+  </div>
+
+  <!-- ===================== Navbar ===================== -->
+  <header class="navbar" id="navbar">
+    <div class="navbar-inner container">
+      <a href="{{ url_for('overview') }}" class="brand">
+        <span class="brand-badge">JFL</span>
+        <span class="brand-text">JAPIA FOOTBALL <span class="accent">LEAGUE</span></span>
+      </a>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="{{ url_for('overview') }}" class="{{ 'active' if active_page == 'overview' }}">Overview</a>
+        <a href="{{ url_for('matches') }}" class="{{ 'active' if active_page == 'matches' }}">Matches</a>
+        <a href="{{ url_for('table') }}" class="{{ 'active' if active_page == 'table' }}">Table</a>
+        <a href="{{ url_for('stats') }}" class="{{ 'active' if active_page == 'stats' }}">Stats</a>
+      </nav>
+
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== Page Content ===================== -->
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ===================== Footer ===================== -->
+  <footer class="footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <div class="brand">
+          <span class="brand-badge">JFL</span>
+          <span class="brand-text">JAPIA FOOTBALL <span class="accent">LEAGUE</span></span>
+        </div>
+        <p>India's premier football tournament — where every match tells a story.</p>
+        <div class="social-row">
+          <a href="#" aria-label="Instagram" class="social-icon">IG</a>
+          <a href="#" aria-label="Twitter/X" class="social-icon">X</a>
+          <a href="#" aria-label="YouTube" class="social-icon">YT</a>
+          <a href="#" aria-label="Facebook" class="social-icon">FB</a>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h4>Explore</h4>
+        <a href="{{ url_for('overview') }}">Overview</a>
+        <a href="{{ url_for('matches') }}">Matches</a>
+        <a href="{{ url_for('table') }}">Table</a>
+        <a href="{{ url_for('stats') }}">Stats</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Tournament</h4>
+        <a href="#">About Jaoia Football League</a>
+        <a href="#">Teams</a>
+        <a href="#">Season Fixtures</a>
+        <a href="#">Media Center</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Get in touch</h4>
+        <a href="#">Support</a>
+        <a href="#">Partnerships</a>
+        <a href="#">Broadcast Rights</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; <span id="year"></span> Japia Football League. All rights reserved. Built for demo purposes.</p>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

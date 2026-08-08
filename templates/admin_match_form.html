@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Match{% endblock %}
+
+{% block content %}
+<style>
+  .admin-field label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .admin-field input,
+  .admin-field select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-soft);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+  }
+</style>
+
+<section class="page-header container reveal">
+  <h1>{{ action }} Match</h1>
+</section>
+
+<section class="container reveal">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin-bottom:20px;">
+        {% for category, msg in messages %}
+          <p style="padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:8px;
+                    background: rgba(230,72,72,0.12); color: var(--red-500);">
+            {{ msg }}
+          </p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="glass" style="padding:28px; border-radius:var(--radius-lg); max-width:640px;">
+    <form method="POST">
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div class="admin-field">
+          <label>Home Team</label>
+          <select name="home_team_id" required>
+            <option value="">Select...</option>
+            {% for tid, t in teams.items() %}
+            <option value="{{ tid }}" {{ 'selected' if match and match.home_team_id == tid }}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-field">
+          <label>Away Team</label>
+          <select name="away_team_id" required>
+            <option value="">Select...</option>
+            {% for tid, t in teams.items() %}
+            <option value="{{ tid }}" {{ 'selected' if match and match.away_team_id == tid }}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div class="admin-field">
+          <label>Date <span style="color:var(--text-muted);">(Saturday or Sunday only)</span></label>
+          <input type="date" name="match_date" required value="{{ match.date_part if match else '' }}">
+        </div>
+        <div class="admin-field">
+          <label>Time</label>
+          <input type="time" name="match_time" required value="{{ match.time_part if match else '' }}">
+        </div>
+      </div>
+
+      <div class="admin-field" style="margin-bottom:16px;">
+        <label>Stadium</label>
+        <input type="text" name="stadium" required value="{{ match.stadium if match else '' }}">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div class="admin-field">
+          <label>Matchweek</label>
+          <input type="number" name="matchweek" min="1" value="{{ match.matchweek if match else 1 }}">
+        </div>
+        <div class="admin-field">
+          <label>Stage</label>
+          <select name="stage">
+            <option value="league" {{ 'selected' if match and match.stage == 'league' }}>League Stage</option>
+            <option value="round_of_16" {{ 'selected' if match and match.stage == 'round_of_16' }}>Round of 16</option>
+            <option value="quarterfinal" {{ 'selected' if match and match.stage == 'quarterfinal' }}>Quarterfinal</option>
+            <option value="semifinal" {{ 'selected' if match and match.stage == 'semifinal' }}>Semifinal</option>
+            <option value="final" {{ 'selected' if match and match.stage == 'final' }}>Final</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="admin-field" style="margin-bottom:16px;">
+        <label>Status</label>
+        <select name="status">
+          <option value="upcoming" {{ 'selected' if match and match.status == 'upcoming' }}>Upcoming</option>
+          <option value="live" {{ 'selected' if match and match.status == 'live' }}>Live</option>
+          <option value="finished" {{ 'selected' if match and match.status == 'finished' }}>Finished</option>
+        </select>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
+        <div class="admin-field">
+          <label>Home Score</label>
+          <input type="number" name="home_score" min="0"
+                 value="{{ match.home_score if match and match.home_score is not none else '' }}">
+        </div>
+        <div class="admin-field">
+          <label>Away Score</label>
+          <input type="number" name="away_score" min="0"
+                 value="{{ match.away_score if match and match.away_score is not none else '' }}">
+        </div>
+        <div class="admin-field">
+          <label>Minute (if live)</label>
+          <input type="number" name="minute" min="0" max="120"
+                 value="{{ match.minute if match and match.minute is not none else '' }}">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px;">
+        <button type="submit" class="btn btn-primary">{{ action }} Match</button>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

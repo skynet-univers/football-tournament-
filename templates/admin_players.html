@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Manage Players{% endblock %}
+
+{% block content %}
+<section class="page-header container reveal">
+  <h1>Manage Players</h1>
+  <p class="section-sub">Register players against their team for the stats leaderboards.</p>
+</section>
+
+<section class="container reveal">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin-bottom:20px;">
+        {% for category, msg in messages %}
+          <p style="padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:8px;
+                    background: {{ 'rgba(46,207,120,0.12)' if category == 'success' else 'rgba(230,72,72,0.12)' }};
+                    color: {{ 'var(--green-400)' if category == 'success' else 'var(--red-500)' }};">
+            {{ msg }}
+          </p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+    {% if teams %}
+    <a href="{{ url_for('admin_add_player') }}" class="btn btn-primary">+ Add Player</a>
+    {% else %}
+    <p class="empty-state">Add a team first before adding players.</p>
+    {% endif %}
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
+  </div>
+
+  <div class="glass table-wrap full-table-wrap">
+    <table class="full-table">
+      <thead>
+        <tr><th>Name</th><th class="team-col">Team</th><th>Position</th><th>G</th><th>A</th><th>CS</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for p in players %}
+        <tr>
+          <td>{{ p.name }}</td>
+          <td class="team-col">{{ p.team_short_name }}</td>
+          <td>{{ p.position }}</td>
+          <td>{{ p.goals }}</td>
+          <td>{{ p.assists }}</td>
+          <td>{{ p.clean_sheets }}</td>
+          <td>
+            <div style="display:flex; gap:8px;">
+              <a href="{{ url_for('admin_edit_player', player_id=p.id) }}"
+                 class="btn btn-outline" style="padding:6px 12px; font-size:0.85rem;">Edit</a>
+              <form method="POST" action="{{ url_for('admin_delete_player', player_id=p.id) }}"
+                    onsubmit="return confirm('Remove this player?');">
+                <button type="submit" class="btn btn-outline"
+                        style="padding:6px 12px; font-size:0.85rem; color:var(--red-500); cursor:pointer;">
+                  Delete
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty-state">No players yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

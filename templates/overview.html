@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+
+{% block content %}
+
+<!-- ===================== Hero Banner ===================== -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="container hero-inner reveal">
+    <div class="hero-logo">
+      <div class="logo-ring">
+        <span>JFL</span>
+      </div>
+    </div>
+    <h1 class="hero-title">JAPIA FOOTBALL <span class="accent">LEAGUE</span></h1>
+    <p class="hero-tagline">Season 2026 — India's fastest-growing football tournament,
+      bringing together elite clubs from across the nation.</p>
+
+    <div class="hero-cta-row">
+      <a href="{{ url_for('matches') }}" class="btn btn-primary">View Matches</a>
+      <a href="{{ url_for('table') }}" class="btn btn-outline">League Table</a>
+    </div>
+  </div>
+  <div class="hero-scroll-cue"><span></span></div>
+</section>
+
+<!-- ===================== Countdown + Featured Match ===================== -->
+<section class="section container reveal">
+  <div class="section-head">
+    <h2>Next Up</h2>
+    <p class="section-sub">Don't miss the action — here's what's coming.</p>
+  </div>
+
+  {% if next_match %}
+  <div class="featured-card glass">
+    <div class="featured-top">
+      <span class="pill {{ 'pill-live' if next_match.status == 'live' else 'pill-upcoming' }}">
+        {% if next_match.status == 'live' %}● LIVE — {{ next_match.minute }}'{% else %}Matchweek {{ next_match.matchweek }}{% endif %}
+      </span>
+      <span class="featured-meta">{{ next_match.stadium }}</span>
+    </div>
+
+    <div class="featured-teams">
+      <div class="featured-team">
+        <div class="team-crest" style="--crest-color:{{ next_match.home.primary_color }}">{{ next_match.home.initials }}</div>
+        <span class="team-name">{{ next_match.home.name }}</span>
+      </div>
+
+      <div class="featured-center">
+        {% if next_match.status == 'live' %}
+          <div class="live-score">{{ next_match.home_score }} - {{ next_match.away_score }}</div>
+        {% else %}
+          <div class="vs">VS</div>
+          <div id="countdown" class="countdown" data-datetime="{{ next_match.datetime.isoformat() }}">
+            <div class="countdown-box"><span id="cd-days">00</span><small>Days</small></div>
+            <div class="countdown-box"><span id="cd-hours">00</span><small>Hrs</small></div>
+            <div class="countdown-box"><span id="cd-minutes">00</span><small>Min</small></div>
+            <div class="countdown-box"><span id="cd-seconds">00</span><small>Sec</small></div>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="featured-team">
+        <div class="team-crest" style="--crest-color:{{ next_match.away.primary_color }}">{{ next_match.away.initials }}</div>
+        <span class="team-name">{{ next_match.away.name }}</span>
+      </div>
+    </div>
+
+    <div class="featured-footer">
+      <span>{{ next_match.date_str }}</span>
+      <span class="dot">•</span>
+      <span>{{ next_match.time_str }}</span>
+    </div>
+  </div>
+  {% else %}
+  <div class="glass empty-state">No upcoming matches scheduled right now.</div>
+  {% endif %}
+</section>
+
+<!-- ===================== Latest Results ===================== -->
+<section class="section container reveal">
+  <div class="section-head">
+    <h2>Latest Results</h2>
+    <p class="section-sub">Catch up on the most recent full-time scores.</p>
+  </div>
+
+  <div class="results-grid">
+    {% for m in latest_results %}
+    <div class="result-card glass hover-lift">
+      <div class="result-week">Matchweek {{ m.matchweek }}</div>
+      <div class="result-row">
+        <div class="result-team">
+          <div class="team-crest small" style="--crest-color:{{ m.home.primary_color }}">{{ m.home.initials }}</div>
+          <span>{{ m.home.short_name }}</span>
+        </div>
+        <div class="result-score">{{ m.home_score }} - {{ m.away_score }}</div>
+        <div class="result-team">
+          <span>{{ m.away.short_name }}</span>
+          <div class="team-crest small" style="--crest-color:{{ m.away.primary_color }}">{{ m.away.initials }}</div>
+        </div>
+      </div>
+      <div class="result-meta">{{ m.date_str }} • {{ m.stadium }}</div>
+    </div>
+    {% else %}
+    <p class="empty-state">No results yet.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ===================== Table Preview ===================== -->
+<section class="section container reveal">
+  <div class="section-head">
+    <h2>Standings Snapshot</h2>
+    <p class="section-sub">Top of the table right now.</p>
+  </div>
+
+  <div class="glass table-wrap">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Team</th><th>P</th><th>GD</th><th>Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in standings %}
+        <tr>
+          <td>{{ row.position }}</td>
+          <td class="mini-team-cell">
+            <div class="team-crest tiny" style="--crest-color:{{ row.primary_color }}">{{ row.initials }}</div>
+            {{ row.short_name }}
+          </td>
+          <td>{{ row.played }}</td>
+          <td>{{ row.gd }}</td>
+          <td class="pts">{{ row.points }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <a href="{{ url_for('table') }}" class="btn btn-outline table-cta">Full Table</a>
+  </div>
+</section>
+
+{% endblock %}

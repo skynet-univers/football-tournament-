@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Matches{% endblock %}
+
+{% block content %}
+
+<section class="page-header container reveal">
+  <h1>Matches</h1>
+  <p class="section-sub">Follow every fixture — from kickoff to final whistle.</p>
+</section>
+
+<section class="container reveal">
+  <!-- Tabs -->
+  <div class="tabs" id="matchTabs">
+    <button class="tab-btn active" data-tab="live">
+      Live {% if live|length > 0 %}<span class="tab-badge live-badge">{{ live|length }}</span>{% endif %}
+    </button>
+    <button class="tab-btn" data-tab="upcoming">Upcoming</button>
+    <button class="tab-btn" data-tab="finished">Finished</button>
+    <button class="tab-btn" data-tab="bracket">Knockout</button>
+  </div>
+
+  <!-- Live -->
+  <div class="tab-panel active" id="panel-live">
+    <div class="matches-grid">
+      {% for m in live %}
+      <div class="match-card glass hover-lift">
+        <div class="match-card-top">
+          <span class="pill pill-live">● LIVE — {{ m.minute }}'</span>
+          <span class="match-week">MW {{ m.matchweek }}</span>
+        </div>
+        <div class="match-teams">
+          <div class="match-team">
+            <div class="team-crest" style="--crest-color:{{ m.home.primary_color }}">{{ m.home.initials }}</div>
+            <span>{{ m.home.short_name }}</span>
+          </div>
+          <div class="match-score live-score">{{ m.home_score }} - {{ m.away_score }}</div>
+          <div class="match-team">
+            <div class="team-crest" style="--crest-color:{{ m.away.primary_color }}">{{ m.away.initials }}</div>
+            <span>{{ m.away.short_name }}</span>
+          </div>
+        </div>
+        <div class="match-details">
+          <span>📍 {{ m.stadium }}</span>
+        </div>
+      </div>
+      {% else %}
+      <p class="empty-state">No live matches at the moment. Check back soon!</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Upcoming -->
+  <div class="tab-panel" id="panel-upcoming">
+    <div class="matches-grid">
+      {% for m in upcoming %}
+      <div class="match-card glass hover-lift">
+        <div class="match-card-top">
+          <span class="pill pill-upcoming">Upcoming</span>
+          <span class="match-week">MW {{ m.matchweek }}</span>
+        </div>
+        <div class="match-teams">
+          <div class="match-team">
+            <div class="team-crest" style="--crest-color:{{ m.home.primary_color }}">{{ m.home.initials }}</div>
+            <span>{{ m.home.short_name }}</span>
+          </div>
+          <div class="match-score">VS</div>
+          <div class="match-team">
+            <div class="team-crest" style="--crest-color:{{ m.away.primary_color }}">{{ m.away.initials }}</div>
+            <span>{{ m.away.short_name }}</span>
+          </div>
+        </div>
+        <div class="match-details">
+          <span>📅 {{ m.date_str }}</span>
+          <span>🕒 {{ m.time_str }}</span>
+          <span>📍 {{ m.stadium }}</span>
+        </div>
+      </div>
+      {% else %}
+      <p class="empty-state">No upcoming matches scheduled.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Finished -->
+  <div class="tab-panel" id="panel-finished">
+    <div class="matches-grid">
+      {% for m in finished %}
+      <div class="match-card glass hover-lift">
+        <div class="match-card-top">
+          <span class="pill pill-finished">Full Time</span>
+          <span class="match-week">MW {{ m.matchweek }}</span>
+        </div>
+        <div class="match-teams">
+          <div class="match-team">
+            <div class="team-crest" style="--crest-color:{{ m.home.primary_color }}">{{ m.home.initials }}</div>
+            <span>{{ m.home.short_name }}</span>
+          </div>
+          <div class="match-score">{{ m.home_score }} - {{ m.away_score }}</div>
+          <div class="match-team">
+            <div class="team-crest" style="--crest-color:{{ m.away.primary_color }}">{{ m.away.initials }}</div>
+            <span>{{ m.away.short_name }}</span>
+          </div>
+        </div>
+        <div class="match-details">
+          <span>📅 {{ m.date_str }}</span>
+          <span>📍 {{ m.stadium }}</span>
+        </div>
+      </div>
+      {% else %}
+      <p class="empty-state">No finished matches yet.</p>
+      {% endfor %}
+    </div>
+  </div>  <!-- Knockout Bracket -->
+  <div class="tab-panel" id="panel-bracket">
+    {% set has_bracket = bracket.round_of_16 or bracket.quarterfinal or bracket.semifinal or bracket.final %}
+    {% if not has_bracket %}
+    <p class="empty-state">Knockout stage hasn't started yet — check back once the league stage wraps up.</p>
+    {% else %}
+      {% for stage_key in ["round_of_16", "quarterfinal", "semifinal", "final"] %}
+        {% if bracket[stage_key] %}
+        <div class="section-head">
+          <h2>{{ stage_labels[stage_key] }}</h2>
+        </div>
+        <div class="matches-grid">
+          {% for m in bracket[stage_key] %}
+          <div class="match-card glass hover-lift">
+            <div class="match-card-top">
+              <span class="pill {{ 'pill-live' if m.status == 'live' else 'pill-finished' if m.status == 'finished' else 'pill-upcoming' }}">
+                {% if m.status == 'live' %}● LIVE — {{ m.minute }}'{% elif m.status == 'finished' %}Full Time{% else %}Upcoming{% endif %}
+              </span>
+            </div>
+            <div class="match-teams">
+              <div class="match-team">
+                <div class="team-crest" style="--crest-color:{{ m.home.primary_color }}">{{ m.home.initials }}</div>
+                <span>{{ m.home.short_name }}</span>
+              </div>
+              <div class="match-score {{ 'live-score' if m.status == 'live' }}">
+                {% if m.status == 'upcoming' %}VS{% else %}{{ m.home_score }} - {{ m.away_score }}{% endif %}
+              </div>
+              <div class="match-team">
+                <div class="team-crest" style="--crest-color:{{ m.away.primary_color }}">{{ m.away.initials }}</div>
+                <span>{{ m.away.short_name }}</span>
+              </div>
+            </div>
+            <div class="match-details">
+              <span>📅 {{ m.date_str }}</span>
+              <span>📍 {{ m.stadium }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </div>
+
+</section>
+
+{% endblock %}

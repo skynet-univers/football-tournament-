@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+
+{% block content %}
+
+<section class="page-header container reveal">
+  <h1>Statistics</h1>
+  <p class="section-sub">Player leaderboards and team-by-team breakdowns.</p>
+</section>
+
+<section class="container reveal">
+  <div class="stats-grid">
+
+    <!-- Top Scorers -->
+    <div class="stat-card glass">
+      <h3>Top Goal Scorers</h3>
+      <ul class="stat-list">
+        {% for p in top_scorers %}
+        <li class="stat-row">
+          <span class="stat-rank">{{ loop.index }}</span>
+          <div class="team-crest tiny" style="--crest-color:{{ p.primary_color }}">{{ p.initials }}</div>
+          <span class="stat-name">{{ p.name }}</span>
+          <span class="stat-value">{{ p.goals }}</span>
+        </li>
+        {% else %}
+        <li class="empty-state">No data yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <!-- Top Assists -->
+    <div class="stat-card glass">
+      <h3>Top Assists</h3>
+      <ul class="stat-list">
+        {% for p in top_assists %}
+        <li class="stat-row">
+          <span class="stat-rank">{{ loop.index }}</span>
+          <div class="team-crest tiny" style="--crest-color:{{ p.primary_color }}">{{ p.initials }}</div>
+          <span class="stat-name">{{ p.name }}</span>
+          <span class="stat-value">{{ p.assists }}</span>
+        </li>
+        {% else %}
+        <li class="empty-state">No data yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <!-- Most Clean Sheets -->
+    <div class="stat-card glass">
+      <h3>Most Clean Sheets</h3>
+      <ul class="stat-list">
+        {% for p in top_clean_sheets %}
+        <li class="stat-row">
+          <span class="stat-rank">{{ loop.index }}</span>
+          <div class="team-crest tiny" style="--crest-color:{{ p.primary_color }}">{{ p.initials }}</div>
+          <span class="stat-name">{{ p.name }}</span>
+          <span class="stat-value">{{ p.clean_sheets }}</span>
+        </li>
+        {% else %}
+        <li class="empty-state">No data yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- Team Goals bar chart -->
+  <div class="section-head">
+    <h2>Team Goals</h2>
+  </div>
+  <div class="glass bar-chart-card">
+    {% for t in team_goals %}
+    <div class="bar-row">
+      <div class="bar-label">
+        <div class="team-crest tiny" style="--crest-color:{{ t.primary_color }}">{{ t.initials }}</div>
+        {{ t.short_name }}
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="--bar-width: {{ (t.gf / (team_goals[0].gf if team_goals[0].gf > 0 else 1) * 100) }}%; --bar-color:{{ t.primary_color }}"></div>
+      </div>
+      <div class="bar-value">{{ t.gf }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Team Wins bar chart -->
+  <div class="section-head">
+    <h2>Team Wins</h2>
+  </div>
+  <div class="glass bar-chart-card">
+    {% for t in team_wins %}
+    <div class="bar-row">
+      <div class="bar-label">
+        <div class="team-crest tiny" style="--crest-color:{{ t.primary_color }}">{{ t.initials }}</div>
+        {{ t.short_name }}
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="--bar-width: {{ (t.won / (team_wins[0].won if team_wins[0].won > 0 else 1) * 100) }}%; --bar-color:{{ t.primary_color }}"></div>
+      </div>
+      <div class="bar-value">{{ t.won }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Possession -->
+  <div class="section-head">
+    <h2>Team Possession (avg %)</h2>
+  </div>
+  <div class="glass bar-chart-card">
+    {% for t in team_possession %}
+    <div class="bar-row">
+      <div class="bar-label">
+        <div class="team-crest tiny" style="--crest-color:{{ t.primary_color }}">{{ t.initials }}</div>
+        {{ t.short_name }}
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="--bar-width: {{ t.avg_possession }}%; --bar-color:{{ t.primary_color }}"></div>
+      </div>
+      <div class="bar-value">{{ t.avg_possession }}%</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Discipline -->
+  <div class="section-head">
+    <h2>Disciplinary Record</h2>
+    <p class="section-sub">Yellow and red cards by team this season.</p>
+  </div>
+  <div class="glass table-wrap">
+    <table class="mini-table discipline-table">
+      <thead>
+        <tr><th>Team</th><th>🟨 Yellow</th><th>🟥 Red</th></tr>
+      </thead>
+      <tbody>
+        {% for t in discipline %}
+        <tr>
+          <td class="mini-team-cell">
+            <div class="team-crest tiny" style="--crest-color:{{ t.primary_color }}">{{ t.initials }}</div>
+            {{ t.short_name }}
+          </td>
+          <td><span class="card-chip yellow-chip">{{ t.team_yellow }}</span></td>
+          <td><span class="card-chip red-chip">{{ t.team_red }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</section>
+
+{% endblock %}

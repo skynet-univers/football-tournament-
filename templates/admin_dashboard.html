@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<section class="page-header container reveal">
+  <h1>Admin Dashboard</h1>
+  <p class="section-sub">Add fixtures, update live scores, mark matches full-time.</p>
+</section>
+
+<section class="container reveal">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin-bottom:20px;">
+        {% for category, msg in messages %}
+          <p style="padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:8px;
+                    background: {{ 'rgba(46,207,120,0.12)' if category == 'success' else 'rgba(230,72,72,0.12)' }};
+                    color: {{ 'var(--green-400)' if category == 'success' else 'var(--red-500)' }};">
+            {{ msg }}
+          </p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <a href="{{ url_for('admin_add_match') }}" class="btn btn-primary">+ Add Match</a>
+      <a href="{{ url_for('admin_teams') }}" class="btn btn-outline">Manage Teams ({{ teams|length }})</a>
+      <a href="{{ url_for('admin_players') }}" class="btn btn-outline">Manage Players</a>
+    </div>
+    <a href="{{ url_for('admin_logout') }}" class="btn btn-outline">Log Out</a>
+  </div>
+
+  <div class="glass table-wrap full-table-wrap">
+    <table class="full-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th class="team-col">Fixture</th>
+          <th>Date</th>
+          <th>Stage</th>
+          <th>Status</th>
+          <th>Score</th>
+          <th>MW</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in matches %}
+        <tr>
+          <td>{{ m.id }}</td>
+          <td class="team-col">{{ m.home.short_name }} vs {{ m.away.short_name }}</td>
+          <td>{{ m.date_str }} &middot; {{ m.time_str }}</td>
+          <td>{{ m.stage_label }}</td>
+          <td>{{ m.status }}</td>
+          <td>{{ m.home_score if m.home_score is not none else '-' }} - {{ m.away_score if m.away_score is not none else '-' }}</td>
+          <td>{{ m.matchweek }}</td>
+          <td>
+            <div style="display:flex; gap:8px;">
+              <a href="{{ url_for('admin_edit_match', match_id=m.id) }}"
+                 class="btn btn-outline" style="padding:6px 12px; font-size:0.85rem;">Edit</a>
+              <form method="POST" action="{{ url_for('admin_delete_match', match_id=m.id) }}"
+                    onsubmit="return confirm('Delete this match?');">
+                <button type="submit" class="btn btn-outline"
+                        style="padding:6px 12px; font-size:0.85rem; color:var(--red-500); cursor:pointer;">
+                  Delete
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty-state">No matches yet. Add one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

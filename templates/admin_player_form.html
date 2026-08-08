@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Player{% endblock %}
+
+{% block content %}
+<style>
+  .admin-field label { display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px; }
+  .admin-field input, .admin-field select {
+    width:100%; padding:10px 12px; border-radius:var(--radius-sm);
+    border:1px solid var(--border-soft); background:var(--bg-card);
+    color:var(--text-primary); font-family:var(--font-body);
+  }
+</style>
+
+<section class="page-header container reveal">
+  <h1>{{ action }} Player</h1>
+</section>
+
+<section class="container reveal">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin-bottom:20px;">
+        {% for category, msg in messages %}
+          <p style="padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:8px;
+                    background: rgba(230,72,72,0.12); color: var(--red-500);">
+            {{ msg }}
+          </p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="glass" style="padding:28px; border-radius:var(--radius-lg); max-width:560px;">
+    <form method="POST">
+      <div class="admin-field" style="margin-bottom:16px;">
+        <label>Player Name</label>
+        <input type="text" name="name" required value="{{ player.name if player else '' }}">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div class="admin-field">
+          <label>Team</label>
+          <select name="team_id" required>
+            <option value="">Select...</option>
+            {% for tid, t in teams.items() %}
+            <option value="{{ tid }}" {{ 'selected' if player and player.team_id == tid }}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-field">
+          <label>Position</label>
+          <select name="position">
+            {% for pos in ["Forward", "Midfielder", "Defender", "Goalkeeper"] %}
+            <option value="{{ pos }}" {{ 'selected' if player and player.position == pos }}>{{ pos }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div class="admin-field">
+          <label>Goals</label>
+          <input type="number" name="goals" min="0" value="{{ player.goals if player else 0 }}">
+        </div>
+        <div class="admin-field">
+          <label>Assists</label>
+          <input type="number" name="assists" min="0" value="{{ player.assists if player else 0 }}">
+        </div>
+        <div class="admin-field">
+          <label>Clean Sheets</label>
+          <input type="number" name="clean_sheets" min="0" value="{{ player.clean_sheets if player else 0 }}">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
+        <div class="admin-field">
+          <label>Yellow Cards</label>
+          <input type="number" name="yellow_cards" min="0" value="{{ player.yellow_cards if player else 0 }}">
+        </div>
+        <div class="admin-field">
+          <label>Red Cards</label>
+          <input type="number" name="red_cards" min="0" value="{{ player.red_cards if player else 0 }}">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px;">
+        <button type="submit" class="btn btn-primary">{{ action }} Player</button>
+        <a href="{{ url_for('admin_players') }}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
