@@ -431,16 +431,6 @@ def _match_form_to_db(form):
         errors.append("Stadium is required.")
     if stage not in STAGES:
         errors.append("Invalid stage selected.")
-
-    # Tournament matches are only played on weekends.
-    if match_date:
-        try:
-            parsed_date = datetime.strptime(match_date, "%Y-%m-%d")
-            if parsed_date.weekday() not in (5, 6):  # 5=Saturday, 6=Sunday
-                errors.append("Matches can only be scheduled on a Saturday or Sunday.")
-        except ValueError:
-            errors.append("Invalid date format.")
-
     try:
         matchweek = int(form.get("matchweek") or 1)
     except ValueError:
