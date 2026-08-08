@@ -157,8 +157,9 @@ def compute_standings():
 
 def format_match(m, teams):
     """Convert a sqlite3.Row match into a template-friendly dict."""
-    home = teams[m["home_team_id"]]
-    away = teams[m["away_team_id"]]
+    home = teams.get(m["home_team_id"])
+    away = teams.get(m["away_team_id"])
+    if home is None or away is None:return None
     dt = datetime.strptime(m["match_datetime"], "%Y-%m-%d %H:%M")
     return {
         "id": m["id"],
