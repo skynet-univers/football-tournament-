@@ -10,12 +10,19 @@ Routes:
     /stats       -> Statistics page
     /api/countdown -> JSON endpoint used by the JS countdown timer
 
-Data is read from database.db (SQLite) via helper functions below.
-Run `python init_db.py` once before starting the server.
+Data is read from Supabase PostgreSQL when DATABASE_URL is set. For local development, database.db (SQLite) remains supported.
+Run `python init_db.py` once to create the PostgreSQL schema.
 """
 
 import os
 import sqlite3
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+    RealDictCursor = None
 from datetime import datetime
 from functools import wraps
 
@@ -26,6 +33,8 @@ from flask import (
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+USE_POSTGRES = bool(DATABASE_URL)
 
 app = Flask(__name__)
 
@@ -61,10 +70,21 @@ def login_required(view):
 # Database helpers
 # ----------------------------------------------------------------------
 def get_db():
-    """Open a new database connection if there isn't one for this request."""
+    """Open a database connection for this request.
+
+    Render uses Supabase PostgreSQL through DATABASE_URL.
+    Local development can still use the original SQLite database.db.
+    """
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row  # allows dict-like access to rows
+        if USE_POSTGRES:
+            if psycopg2 is None:
+                raise RuntimeError(
+                    "psycopg2-binary is required when DATABASE_URL is set."
+                )
+            g.db = psycopg2.connect(DATABASE_URL, sslmode="require")
+        else:
+            g.db = sqlite3.connect(DB_PATH)
+            g.db.row_factory = sqlite3.Row
     return g.db
 
 
@@ -76,12 +96,36 @@ def close_db(exception=None):
         db.close()
 
 
+def _adapt_sql(sql):
+    """Convert SQLite ? placeholders to PostgreSQL %s placeholders."""
+    return sql.replace("?", "%s") if USE_POSTGRES else sql
+
+
+def db_execute(db, sql, params=()):
+    """Execute SQL on either PostgreSQL or SQLite."""
+    if USE_POSTGRES:
+        cur = db.cursor(cursor_factory=RealDictCursor)
+        cur.execute(_adapt_sql(sql), params)
+        return cur
+    return db_execute(db, sql, params)
+
+
 def query_all(sql, params=()):
-    return get_db().execute(sql, params).fetchall()
+    db = get_db()
+    cur = db_execute(db, sql, params)
+    rows = cur.fetchall()
+    if USE_POSTGRES:
+        cur.close()
+    return rows
 
 
 def query_one(sql, params=()):
-    return get_db().execute(sql, params).fetchone()
+    db = get_db()
+    cur = db_execute(db, sql, params)
+    row = cur.fetchone()
+    if USE_POSTGRES:
+        cur.close()
+    return row
 
 
 # ----------------------------------------------------------------------
@@ -467,7 +511,7 @@ def admin_add_match():
                 flash(e, "error")
         else:
             db = get_db()
-            db.execute(
+            db_execute(db, 
                 """INSERT INTO matches (home_team_id, away_team_id, match_datetime,
                        stadium, matchweek, stage, status, home_score, away_score, minute)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -498,7 +542,7 @@ def admin_edit_match(match_id):
                 flash(e, "error")
         else:
             db = get_db()
-            db.execute(
+            db_execute(db, 
                 """UPDATE matches SET home_team_id=?, away_team_id=?, match_datetime=?,
                        stadium=?, matchweek=?, stage=?, status=?, home_score=?, away_score=?, minute=?
                    WHERE id=?""",
@@ -521,7 +565,7 @@ def admin_edit_match(match_id):
 @login_required
 def admin_delete_match(match_id):
     db = get_db()
-    db.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+    db_execute(db, "DELETE FROM matches WHERE id = ?", (match_id,))
     db.commit()
     flash("Match deleted.", "success")
     return redirect(url_for("admin_dashboard"))
@@ -573,7 +617,7 @@ def admin_add_team():
                 flash(e, "error")
         else:
             db = get_db()
-            db.execute(
+            db_execute(db, 
                 """INSERT INTO teams (name, short_name, city, initials,
                        primary_color, secondary_color)
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -601,7 +645,7 @@ def admin_edit_team(team_id):
                 flash(e, "error")
         else:
             db = get_db()
-            db.execute(
+            db_execute(db, 
                 """UPDATE teams SET name=?, short_name=?, city=?, initials=?,
                        primary_color=?, secondary_color=? WHERE id=?""",
                 (data["name"], data["short_name"], data["city"], data["initials"],
@@ -625,8 +669,8 @@ def admin_delete_team(team_id):
     if in_use["c"] > 0:
         flash("Can't delete a team that already has matches scheduled — remove those matches first.", "error")
         return redirect(url_for("admin_teams"))
-    db.execute("DELETE FROM players WHERE team_id = ?", (team_id,))
-    db.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+    db_execute(db, "DELETE FROM players WHERE team_id = ?", (team_id,))
+    db_execute(db, "DELETE FROM teams WHERE id = ?", (team_id,))
     db.commit()
     flash("Team removed.", "success")
     return redirect(url_for("admin_teams"))
@@ -693,7 +737,7 @@ def admin_add_player():
                 flash(e, "error")
         else:
             db = get_db()
-            db.execute(
+            db_execute(db, 
                 """INSERT INTO players (name, team_id, position, goals, assists,
                        clean_sheets, yellow_cards, red_cards)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -723,7 +767,7 @@ def admin_edit_player(player_id):
                 flash(e, "error")
         else:
             db = get_db()
-            db.execute(
+            db_execute(db, 
                 """UPDATE players SET name=?, team_id=?, position=?, goals=?,
                        assists=?, clean_sheets=?, yellow_cards=?, red_cards=? WHERE id=?""",
                 (data["name"], data["team_id"], data["position"], data["goals"],
@@ -741,7 +785,7 @@ def admin_edit_player(player_id):
 @login_required
 def admin_delete_player(player_id):
     db = get_db()
-    db.execute("DELETE FROM players WHERE id = ?", (player_id,))
+    db_execute(db, "DELETE FROM players WHERE id = ?", (player_id,))
     db.commit()
     flash("Player removed.", "success")
     return redirect(url_for("admin_players"))
@@ -756,6 +800,8 @@ def not_found(e):
 
 
 if __name__ == "__main__":
-    if not os.path.exists(DB_PATH):
+    if USE_POSTGRES:
+        print("Using Supabase PostgreSQL via DATABASE_URL")
+    elif not os.path.exists(DB_PATH):
         print("No database.db found — please run `python init_db.py` first.")
     app.run(debug=True, host="0.0.0.0", port=5000)
