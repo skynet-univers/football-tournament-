@@ -106,22 +106,36 @@
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
-        <div class="admin-field">
-          <label>Home Score</label>
-          <input type="number" name="home_score" min="0"
-                 value="{{ match.home_score if match and match.home_score is not none else '' }}">
-        </div>
-        <div class="admin-field">
-          <label>Away Score</label>
-          <input type="number" name="away_score" min="0"
-                 value="{{ match.away_score if match and match.away_score is not none else '' }}">
-        </div>
-        <div class="admin-field">
-          <label>Minute (if live)</label>
-          <input type="number" name="minute" min="0" max="120"
-                 value="{{ match.minute if match and match.minute is not none else '' }}">
-        </div>
-      </div>
+
+  <div class="admin-field">
+    <label>Home Score</label>
+    <input type="number" name="home_score" min="0"
+           value="{{ match.home_score if match and match.home_score is not none else '' }}">
+  </div>
+
+  <div class="admin-field">
+    <label>Away Score</label>
+    <input type="number" name="away_score" min="0"
+           value="{{ match.away_score if match and match.away_score is not none else '' }}">
+  </div>
+
+  <div class="admin-field">
+    <label>Minute (if live)</label>
+    <input type="number" name="minute" min="0" max="120"
+           value="{{ match.minute if match and match.minute is not none else '' }}">
+  </div>
+
+</div>
+
+<div class="admin-field" style="margin-bottom:24px;">
+  <label>Match Duration (minutes)</label>
+  <input type="number"
+         name="match_duration"
+         min="1"
+         max="120"
+         required
+         value="{{ match.match_duration if match and match.match_duration is not none else 90 }}">
+</div>
 
       <div style="display:flex; gap:12px;">
         <button type="submit" class="btn btn-primary">{{ action }} Match</button>

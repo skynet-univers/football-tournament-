@@ -70,6 +70,10 @@ def create_schema(conn, postgres=False):
                 home_score INTEGER,
                 away_score INTEGER,
                 minute INTEGER,
+                match_duration INTEGER NOT NULL
+                DEFAULT 90,
+                extra_time INTEGER NOT NULL
+                DEFAULT 0,
                 FOREIGN KEY (home_team_id) REFERENCES teams (id),
                 FOREIGN KEY (away_team_id) REFERENCES teams (id)
             )

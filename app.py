@@ -220,6 +220,7 @@ def format_match(m, teams):
         "home_score": m["home_score"],
         "away_score": m["away_score"],
         "minute": m["minute"],
+        "match_duration": m["match_duration"],
     }
 
 
@@ -464,6 +465,7 @@ def _match_form_to_db(form):
     home_score = form.get("home_score") or None
     away_score = form.get("away_score") or None
     minute = form.get("minute") or None
+    match_duration = form.get("match_duration") or 90
 
     errors = []
     if not home_id or not away_id:
@@ -477,13 +479,15 @@ def _match_form_to_db(form):
     if stage not in STAGES:
         errors.append("Invalid stage selected.")
     try:
-        matchweek = int(form.get("matchweek") or 1)
+        match_duration = int(match_duration)
+        if match_duration not in (50, 60, 90):
+            errors.append("Match duration must be 50, 60, or 90 minutes.")
     except ValueError:
-        matchweek = 1
-        errors.append("Matchweek must be a number.")
+        match_duration = 90
+        errors.append("Match duration must be a number.")
 
     if errors:
-        return None, errors
+        return "match_duration": match_duration,, errors
 
     dt_str = f"{match_date} {match_time}"
     return {
@@ -497,6 +501,7 @@ def _match_form_to_db(form):
         "home_score": home_score,
         "away_score": away_score,
         "minute": minute,
+        "match_duration": match_duration,
     }, None
 
 
@@ -512,13 +517,26 @@ def admin_add_match():
         else:
             db = get_db()
             db_execute(db, 
-                """INSERT INTO matches (home_team_id, away_team_id, match_datetime,
-                       stadium, matchweek, stage, status, home_score, away_score, minute)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (data["home_team_id"], data["away_team_id"], data["match_datetime"],
-                 data["stadium"], data["matchweek"], data["stage"], data["status"],
-                 data["home_score"], data["away_score"], data["minute"]),
-            )
+    """INSERT INTO matches (
+           home_team_id, away_team_id, match_datetime,
+           stadium, matchweek, stage, status,
+           home_score, away_score, minute, match_duration
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    (
+        data["home_team_id"],
+        data["away_team_id"],
+        data["match_datetime"],
+        data["stadium"],
+        data["matchweek"],
+        data["stage"],
+        data["status"],
+        data["home_score"],
+        data["away_score"],
+        data["minute"],
+        data["match_duration"],
+    ),
+)
             db.commit()
             flash("Match added successfully.", "success")
             return redirect(url_for("admin_dashboard"))
@@ -543,13 +561,34 @@ def admin_edit_match(match_id):
         else:
             db = get_db()
             db_execute(db, 
-                """UPDATE matches SET home_team_id=?, away_team_id=?, match_datetime=?,
-                       stadium=?, matchweek=?, stage=?, status=?, home_score=?, away_score=?, minute=?
-                   WHERE id=?""",
-                (data["home_team_id"], data["away_team_id"], data["match_datetime"],
-                 data["stadium"], data["matchweek"], data["stage"], data["status"],
-                 data["home_score"], data["away_score"], data["minute"], match_id),
-            )
+    """UPDATE matches SET
+           home_team_id=?,
+           away_team_id=?,
+           match_datetime=?,
+           stadium=?,
+           matchweek=?,
+           stage=?,
+           status=?,
+           home_score=?,
+           away_score=?,
+           minute=?,
+           match_duration=?
+       WHERE id=?""",
+    (
+        data["home_team_id"],
+        data["away_team_id"],
+        data["match_datetime"],
+        data["stadium"],
+        data["matchweek"],
+        data["stage"],
+        data["status"],
+        data["home_score"],
+        data["away_score"],
+        data["minute"],
+        data["match_duration"],
+        match_id,
+    ),
+)
             db.commit()
             flash("Match updated successfully.", "success")
             return redirect(url_for("admin_dashboard"))
