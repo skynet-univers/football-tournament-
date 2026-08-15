@@ -107,7 +107,7 @@ def db_execute(db, sql, params=()):
         cur = db.cursor(cursor_factory=RealDictCursor)
         cur.execute(_adapt_sql(sql), params)
         return cur
-    return db_execute(db, sql, params)
+    return db.execute(sql, params)
 
 
 def query_all(sql, params=()):
@@ -205,6 +205,20 @@ def format_match(m, teams):
     away = teams.get(m["away_team_id"])
     if home is None or away is None:return None
     dt = datetime.strptime(m["match_datetime"], "%Y-%m-%d %H:%M")
+
+    # A match is a "draw" once it's finished with equal scores. Penalties
+    # (knockout stages) may then optionally decide a winner on top of that.
+    penalty_winner_team_id = m["penalty_winner_team_id"] if "penalty_winner_team_id" in m.keys() else None
+    penalty_home_score = m["penalty_home_score"] if "penalty_home_score" in m.keys() else None
+    penalty_away_score = m["penalty_away_score"] if "penalty_away_score" in m.keys() else None
+    is_draw = (
+        m["status"] == "finished"
+        and m["home_score"] is not None
+        and m["away_score"] is not None
+        and m["home_score"] == m["away_score"]
+    )
+    penalty_winner = teams.get(penalty_winner_team_id) if penalty_winner_team_id else None
+
     return {
         "id": m["id"],
         "home": home,
@@ -221,6 +235,11 @@ def format_match(m, teams):
         "away_score": m["away_score"],
         "minute": m["minute"],
         "match_duration": m["match_duration"],
+        "is_draw": is_draw,
+        "penalty_winner_team_id": penalty_winner_team_id,
+        "penalty_home_score": penalty_home_score,
+        "penalty_away_score": penalty_away_score,
+        "penalty_winner": penalty_winner,
     }
 
 
@@ -460,6 +479,7 @@ def _match_form_to_db(form):
     match_date = form.get("match_date")
     match_time = form.get("match_time")
     stadium = form.get("stadium", "").strip()
+    matchweek = form.get("matchweek") or 1
     stage = form.get("stage", "league")
     status = form.get("status", "upcoming")
     home_score = form.get("home_score") or None
@@ -467,7 +487,27 @@ def _match_form_to_db(form):
     minute = form.get("minute") or None
     match_duration = form.get("match_duration") or 90
 
+    # Penalty shootout fields — only meaningful when the match ends level,
+    # but the winner is never required (draw is a perfectly valid result).
+    penalty_winner_side = form.get("penalty_winner") or ""  # "", "home", "away"
+    penalty_home_score = form.get("penalty_home_score") or None
+    penalty_away_score = form.get("penalty_away_score") or None
+
     errors = []
+    try:
+        match_duration = int(match_duration)
+        if match_duration <= 0:
+            errors.append("Match duration must be greater than 0.")
+    except ValueError:
+        match_duration = 90
+        errors.append("Match duration must be a number.")
+
+    try:
+        matchweek = int(matchweek)
+    except ValueError:
+        matchweek = 1
+        errors.append("Matchweek must be a number.")
+
     if not home_id or not away_id:
         errors.append("Please select both teams.")
     elif home_id == away_id:
@@ -478,16 +518,28 @@ def _match_form_to_db(form):
         errors.append("Stadium is required.")
     if stage not in STAGES:
         errors.append("Invalid stage selected.")
-    try:
-        match_duration = int(match_duration)
-        if match_duration not in (50, 60, 90):
-            errors.append("Match duration must be 50, 60, or 90 minutes.")
-    except ValueError:
-        match_duration = 90
-        errors.append("Match duration must be a number.")
+    if penalty_winner_side not in ("", "home", "away"):
+        errors.append("Invalid penalty winner selection.")
 
     if errors:
-        return "match_duration": match_duration,, errors
+        return None, errors
+
+    # Resolve the penalty winner side to an actual team id (or None).
+    if penalty_winner_side == "home":
+        penalty_winner_team_id = home_id
+    elif penalty_winner_side == "away":
+        penalty_winner_team_id = away_id
+    else:
+        penalty_winner_team_id = None
+
+    try:
+        penalty_home_score = int(penalty_home_score) if penalty_home_score is not None else None
+    except ValueError:
+        penalty_home_score = None
+    try:
+        penalty_away_score = int(penalty_away_score) if penalty_away_score is not None else None
+    except ValueError:
+        penalty_away_score = None
 
     dt_str = f"{match_date} {match_time}"
     return {
@@ -502,6 +554,9 @@ def _match_form_to_db(form):
         "away_score": away_score,
         "minute": minute,
         "match_duration": match_duration,
+        "penalty_winner_team_id": penalty_winner_team_id,
+        "penalty_home_score": penalty_home_score,
+        "penalty_away_score": penalty_away_score,
     }, None
 
 
@@ -520,9 +575,10 @@ def admin_add_match():
     """INSERT INTO matches (
            home_team_id, away_team_id, match_datetime,
            stadium, matchweek, stage, status,
-           home_score, away_score, minute, match_duration
+           home_score, away_score, minute, match_duration,
+           penalty_winner_team_id, penalty_home_score, penalty_away_score
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
     (
         data["home_team_id"],
         data["away_team_id"],
@@ -535,6 +591,9 @@ def admin_add_match():
         data["away_score"],
         data["minute"],
         data["match_duration"],
+        data["penalty_winner_team_id"],
+        data["penalty_home_score"],
+        data["penalty_away_score"],
     ),
 )
             db.commit()
@@ -572,7 +631,10 @@ def admin_edit_match(match_id):
            home_score=?,
            away_score=?,
            minute=?,
-           match_duration=?
+           match_duration=?,
+           penalty_winner_team_id=?,
+           penalty_home_score=?,
+           penalty_away_score=?
        WHERE id=?""",
     (
         data["home_team_id"],
@@ -586,6 +648,9 @@ def admin_edit_match(match_id):
         data["away_score"],
         data["minute"],
         data["match_duration"],
+        data["penalty_winner_team_id"],
+        data["penalty_home_score"],
+        data["penalty_away_score"],
         match_id,
     ),
 )
@@ -597,6 +662,12 @@ def admin_edit_match(match_id):
     match = dict(row)
     match["date_part"] = dt.strftime("%Y-%m-%d")
     match["time_part"] = dt.strftime("%H:%M")
+    if match.get("penalty_winner_team_id") == match.get("home_team_id") and match.get("penalty_winner_team_id"):
+        match["penalty_winner_side"] = "home"
+    elif match.get("penalty_winner_team_id") == match.get("away_team_id") and match.get("penalty_winner_team_id"):
+        match["penalty_winner_side"] = "away"
+    else:
+        match["penalty_winner_side"] = ""
     return render_template("admin_match_form.html", teams=teams, match=match, action="Edit")
 
 

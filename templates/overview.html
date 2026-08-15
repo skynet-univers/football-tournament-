@@ -32,12 +32,12 @@
   </div>
 
   {% if next_match %}
-  <div class="featured-card glass">
+  <div class="featured-card glass {{ 'featured-card--live' if next_match.status == 'live' }}">
     <div class="featured-top">
       <span class="pill {{ 'pill-live' if next_match.status == 'live' else 'pill-upcoming' }}">
-        {% if next_match.status == 'live' %}● LIVE — {{ next_match.minute }}'{% else %}Matchweek {{ next_match.matchweek }}{% endif %}
+        {% if next_match.status == 'live' %}<span class="live-dot"></span> LIVE — {{ next_match.minute }}'{% else %}Matchweek {{ next_match.matchweek }}{% endif %}
       </span>
-      <span class="featured-meta">{{ next_match.stadium }}</span>
+      <span class="featured-meta">📍 {{ next_match.stadium }}</span>
     </div>
 
     <div class="featured-teams">
@@ -99,6 +99,13 @@
           <div class="team-crest small" style="--crest-color:{{ m.away.primary_color }}">{{ m.away.initials }}</div>
         </div>
       </div>
+      {% if m.is_draw %}
+        {% if m.penalty_winner %}
+        <div class="result-penalty">{{ m.penalty_winner.short_name }} won on penalties ({{ m.penalty_home_score }}–{{ m.penalty_away_score }})</div>
+        {% else %}
+        <div class="result-penalty result-penalty--draw">DRAW</div>
+        {% endif %}
+      {% endif %}
       <div class="result-meta">{{ m.date_str }} • {{ m.stadium }}</div>
     </div>
     {% else %}

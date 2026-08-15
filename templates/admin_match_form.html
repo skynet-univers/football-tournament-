@@ -137,6 +137,30 @@
          value="{{ match.match_duration if match and match.match_duration is not none else 90 }}">
 </div>
 
+<div class="admin-field" style="margin-bottom:24px; padding:16px; border:1px solid var(--border-soft); border-radius:var(--radius-sm);">
+  <label style="margin-bottom:10px;">Penalty Shootout <span style="color:var(--text-muted); font-weight:400;">(only applies if the score above ends level — optional)</span></label>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+    <div class="admin-field">
+      <label>Winner on Penalties</label>
+      <select name="penalty_winner">
+        <option value="" {{ 'selected' if not match or not match.penalty_winner_side }}>No winner / not applicable</option>
+        <option value="home" {{ 'selected' if match and match.penalty_winner_side == 'home' }}>Home Team</option>
+        <option value="away" {{ 'selected' if match and match.penalty_winner_side == 'away' }}>Away Team</option>
+      </select>
+    </div>
+    <div class="admin-field">
+      <label>Penalty Score (Home)</label>
+      <input type="number" name="penalty_home_score" min="0"
+             value="{{ match.penalty_home_score if match and match.penalty_home_score is not none else '' }}">
+    </div>
+    <div class="admin-field">
+      <label>Penalty Score (Away)</label>
+      <input type="number" name="penalty_away_score" min="0"
+             value="{{ match.penalty_away_score if match and match.penalty_away_score is not none else '' }}">
+    </div>
+  </div>
+</div>
+
       <div style="display:flex; gap:12px;">
         <button type="submit" class="btn btn-primary">{{ action }} Match</button>
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Cancel</a>

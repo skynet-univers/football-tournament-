@@ -101,6 +101,13 @@
             <span>{{ m.away.short_name }}</span>
           </div>
         </div>
+        {% if m.is_draw %}
+          {% if m.penalty_winner %}
+          <div class="result-penalty">{{ m.penalty_winner.short_name }} won on penalties ({{ m.penalty_home_score }}–{{ m.penalty_away_score }})</div>
+          {% else %}
+          <div class="result-penalty result-penalty--draw">DRAW</div>
+          {% endif %}
+        {% endif %}
         <div class="match-details">
           <span>📅 {{ m.date_str }}</span>
           <span>📍 {{ m.stadium }}</span>
@@ -142,6 +149,13 @@
                 <span>{{ m.away.short_name }}</span>
               </div>
             </div>
+            {% if m.is_draw %}
+              {% if m.penalty_winner %}
+              <div class="result-penalty">{{ m.penalty_winner.short_name }} won on penalties ({{ m.penalty_home_score }}–{{ m.penalty_away_score }})</div>
+              {% else %}
+              <div class="result-penalty result-penalty--draw">DRAW</div>
+              {% endif %}
+            {% endif %}
             <div class="match-details">
               <span>📅 {{ m.date_str }}</span>
               <span>📍 {{ m.stadium }}</span>
