@@ -175,14 +175,37 @@ def compute_standings():
         stats[a]["ga"] += hs
 
         if hs > as_:
+            # Normal home win
             stats[h]["won"] += 1
             stats[a]["lost"] += 1
+
         elif hs < as_:
+            # Normal away win
             stats[a]["won"] += 1
             stats[h]["lost"] += 1
+
         else:
-            stats[h]["draw"] += 1
-            stats[a]["draw"] += 1
+            # Match was level after normal time.
+            # If there is a penalty winner, give 3 points
+            # to that team and 0 to the other team.
+            penalty_winner = (
+                m["penalty_winner_team_id"]
+                if "penalty_winner_team_id" in m.keys()
+                else None
+            )
+
+            if penalty_winner == h:
+                stats[h]["won"] += 1
+                stats[a]["lost"] += 1
+
+            elif penalty_winner == a:
+                stats[a]["won"] += 1
+                stats[h]["lost"] += 1
+
+            else:
+                # Genuine draw: 1 point each
+                stats[h]["draw"] += 1
+                stats[a]["draw"] += 1
 
     table = []
     for s in stats.values():
