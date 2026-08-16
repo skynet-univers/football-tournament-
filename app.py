@@ -174,15 +174,37 @@ def compute_standings():
         stats[a]["gf"] += as_
         stats[a]["ga"] += hs
 
-        if hs > as_:
-            stats[h]["won"] += 1
-            stats[a]["lost"] += 1
-        elif hs < as_:
-            stats[a]["won"] += 1
-            stats[h]["lost"] += 1
-        else:
-            stats[h]["draw"] += 1
-            stats[a]["draw"] += 1
+         # Check penalty shootout winner
+    penalty_winner_team_id = (
+        m["penalty_winner_team_id"]
+        if "penalty_winner_team_id" in m.keys()
+        else None
+)
+
+    if hs > as_:
+        # Normal home win
+        stats[h]["won"] += 1
+        stats[a]["lost"] += 1
+
+    elif hs < as_:
+        # Normal away win
+        stats[a]["won"] += 1
+        stats[h]["lost"] += 1
+
+    elif penalty_winner_team_id == h:
+    # Draw after normal time, but home team won on penalties
+        stats[h]["won"] += 1
+        stats[a]["lost"] += 1
+
+    elif penalty_winner_team_id == a:
+    # Draw after normal time, but away team won on penalties
+        stats[a]["won"] += 1
+        stats[h]["lost"] += 1
+
+    else:
+    # Genuine draw — no penalty winner
+        stats[h]["draw"] += 1
+        stats[a]["draw"] += 1
 
     table = []
     for s in stats.values():
