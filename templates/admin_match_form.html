@@ -132,9 +132,75 @@
   <input type="number"
          name="match_duration"
          min="1"
-         max="120"
+         max="180"
          required
-         value="{{ match.match_duration if match and match.match_duration is not none else 90 }}">
+         placeholder="e.g. 50, 60, 90"
+         value="{{ match.match_duration if match and match.match_duration is not none else '' }}">
+  <small style="display:block; margin-top:6px; color:var(--text-muted);">
+    Required. Half time is calculated from this duration. There is no default duration.
+  </small>
+</div>
+
+<div class="admin-field" style="margin-bottom:24px; padding:16px; border:1px solid var(--border-soft); border-radius:var(--radius-sm);">
+  <label style="margin-bottom:10px;">Match Timing Options</label>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div class="admin-field">
+      <label>1st Half Injury Time (min)</label>
+      <input type="number" name="first_half_injury" min="0" max="30"
+             value="{{ match.first_half_injury if match and match.first_half_injury is not none else 0 }}">
+    </div>
+
+    <div class="admin-field">
+      <label>2nd Half Injury Time (min)</label>
+      <input type="number" name="second_half_injury" min="0" max="30"
+             value="{{ match.second_half_injury if match and match.second_half_injury is not none else 0 }}">
+    </div>
+  </div>
+
+  <div class="admin-field" style="margin-top:16px;">
+    <label>Half-Time Break (min)</label>
+    <input type="number" name="halftime_break" min="0" max="60"
+           value="{{ match.halftime_break if match and match.halftime_break is not none else 10 }}">
+    <small style="display:block; margin-top:6px; color:var(--text-muted);">
+      Default: 10 minutes. Set 0 to start the next half immediately.
+    </small>
+  </div>
+
+  <div style="margin-top:18px; padding-top:18px; border-top:1px solid var(--border-soft);">
+    <label style="margin-bottom:10px;">Extra Time</label>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div class="admin-field">
+        <label>Extra Time Duration (min)</label>
+        <input type="number" name="extra_time" min="0" max="60"
+               value="{{ match.extra_time if match and match.extra_time is not none else 0 }}">
+        <small style="display:block; margin-top:6px; color:var(--text-muted);">
+          0 = Extra Time disabled.
+        </small>
+      </div>
+
+      <div class="admin-field">
+        <label>Extra-Time Break (min)</label>
+        <input type="number" name="extra_time_break" min="0" max="30"
+               value="{{ match.extra_time_break if match and match.extra_time_break is not none else 10 }}">
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
+      <div class="admin-field">
+        <label>ET 1st Half Injury (min)</label>
+        <input type="number" name="extra_time_first_half_injury" min="0" max="15"
+               value="{{ match.extra_time_first_half_injury if match and match.extra_time_first_half_injury is not none else 0 }}">
+      </div>
+
+      <div class="admin-field">
+        <label>ET 2nd Half Injury (min)</label>
+        <input type="number" name="extra_time_second_half_injury" min="0" max="15"
+               value="{{ match.extra_time_second_half_injury if match and match.extra_time_second_half_injury is not none else 0 }}">
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="admin-field" style="margin-bottom:24px; padding:16px; border:1px solid var(--border-soft); border-radius:var(--radius-sm);">

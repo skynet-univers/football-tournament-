@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initLoader();
   initNavbar();
   initCountdown();
+  initLiveMatchSync();
   initTabs();
   initScrollReveal();
   initFooterYear();
@@ -73,21 +74,28 @@ function initNavbar() {
 /* ---------------------------------------------------------------------- */
 function initCountdown() {
   const el = document.getElementById("countdown");
-  if (!el) return;
+  const featuredStatus = document.getElementById("featured-status");
+  const featuredMatch = document.getElementById("featured-match");
 
-  const targetDate = new Date(el.dataset.datetime);
-  const dEl = document.getElementById("cd-days");
-  const hEl = document.getElementById("cd-hours");
-  const mEl = document.getElementById("cd-minutes");
-  const sEl = document.getElementById("cd-seconds");
+  // Keep the normal pre-match countdown when the Overview page has one.
+  let targetDate = el ? new Date(el.dataset.datetime) : null;
+  let lastServerStatus = featuredMatch?.dataset.initialStatus || null;
+  let lastFeaturedId = featuredMatch?.dataset.matchId || null;
 
   function pad(n) {
     return String(Math.max(n, 0)).padStart(2, "0");
   }
 
-  function tick() {
+  function renderCountdown(target) {
+    if (!target || !el) return;
+
     const now = new Date();
-    let diff = Math.max(0, targetDate - now);
+    let diff = Math.max(0, target - now);
+
+    const dEl = document.getElementById("cd-days");
+    const hEl = document.getElementById("cd-hours");
+    const mEl = document.getElementById("cd-minutes");
+    const sEl = document.getElementById("cd-seconds");
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     diff -= days * 1000 * 60 * 60 * 24;
@@ -101,14 +109,144 @@ function initCountdown() {
     if (hEl) hEl.textContent = pad(hours);
     if (mEl) mEl.textContent = pad(minutes);
     if (sEl) sEl.textContent = pad(seconds);
+  }
 
-    if (targetDate - now <= 0) {
-      clearInterval(interval);
+  async function refreshFeaturedMatch() {
+    try {
+      const response = await fetch("/api/countdown", { cache: "no-store" });
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (!data.has_match) {
+        // If the page currently shows a match, reload so it can show the
+        // correct empty/upcoming state.
+        if (featuredMatch) window.location.reload();
+        return;
+      }
+
+      const serverStatus = data.status;
+
+      // The featured match itself changed (for example, the previous live
+      // match finished and the next fixture became featured).
+      if (lastFeaturedId && String(data.id) !== String(lastFeaturedId)) {
+        window.location.reload();
+        return;
+      }
+
+      // The server has moved the match between Upcoming/Live/Finished.
+      // Reload once so the existing page structure changes correctly.
+      if (lastServerStatus && serverStatus !== lastServerStatus) {
+        window.location.reload();
+        return;
+      }
+
+      lastServerStatus = serverStatus;
+      lastFeaturedId = String(data.id);
+
+      if (data.datetime) {
+        targetDate = new Date(data.datetime);
+      }
+
+      if (featuredStatus) {
+        if (data.status === "live") {
+          featuredStatus.className = "pill pill-live";
+          featuredStatus.innerHTML = `<span class="live-dot"></span> LIVE — ${data.label}`;
+        } else if (data.status === "upcoming") {
+          featuredStatus.className = "pill pill-upcoming";
+          featuredStatus.textContent = "Upcoming";
+          renderCountdown(targetDate);
+        }
+      }
+    } catch (error) {
+      // Keep the page usable if a polling request temporarily fails.
+      console.warn("Match timer update failed:", error);
     }
   }
 
-  tick();
-  const interval = setInterval(tick, 1000);
+  if (el && targetDate) {
+    renderCountdown(targetDate);
+    setInterval(() => renderCountdown(targetDate), 1000);
+  }
+
+  // The backend is the source of truth for match phase and status.
+  refreshFeaturedMatch();
+  setInterval(refreshFeaturedMatch, 1000);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Live match timing sync                                                 */
+/* ---------------------------------------------------------------------- */
+function initLiveMatchSync() {
+  const cards = document.querySelectorAll(".js-match-card");
+  const hasMatchCards = cards.length > 0;
+
+  function phaseText(item) {
+    if (item.phase === "halftime") return "● LIVE — Half Time";
+    if (item.phase === "extra_time_halftime") return "● LIVE — Extra Time Half Time";
+    if (item.phase === "finished") return "Full Time";
+    if (item.status === "live") return `● LIVE — ${item.label}`;
+    return "Upcoming";
+  }
+
+  async function refresh() {
+    try {
+      const response = await fetch("/api/match-statuses", { cache: "no-store" });
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const currentCards = document.querySelectorAll(".js-match-card");
+      const byId = new Map(data.matches.map((m) => [String(m.id), m]));
+
+      // If a match has just entered/leaved live state, reload the page so it
+      // moves between the correct tabs.
+      for (const card of currentCards) {
+        const id = card.dataset.matchId;
+        const previous = card.dataset.initialStatus;
+        const current = byId.get(String(id));
+
+        if (current && current.status !== previous) {
+          window.location.reload();
+          return;
+        }
+
+        if (!current && previous !== "finished") {
+          // It may have just become finished and therefore disappeared from
+          // the live/upcoming API response.
+          if (previous === "live" || previous === "upcoming") {
+            window.location.reload();
+            return;
+          }
+        }
+      }
+
+      // If a new live match appeared while the page was open, reload so it
+      // appears in the Live tab.
+      const currentIds = new Set(
+        [...currentCards].map((card) => String(card.dataset.matchId))
+      );
+      if (data.matches.some((m) => m.status === "live" && !currentIds.has(String(m.id)))) {
+        window.location.reload();
+        return;
+      }
+
+      // Update the displayed live minute/phase without reloading.
+      currentCards.forEach((card) => {
+        const item = byId.get(String(card.dataset.matchId));
+        const label = card.querySelector(".js-match-status");
+        if (!item || !label) return;
+
+        label.textContent = phaseText(item);
+      });
+    } catch (error) {
+      console.warn("Live match sync failed:", error);
+    }
+  }
+
+  if (hasMatchCards) {
+    refresh();
+    setInterval(refresh, 1000);
+  }
 }
 
 /* ---------------------------------------------------------------------- */

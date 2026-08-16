@@ -23,9 +23,9 @@
   <div class="tab-panel active" id="panel-live">
     <div class="matches-grid">
       {% for m in live %}
-      <div class="match-card glass hover-lift">
+      <div class="match-card glass hover-lift js-match-card" data-match-id="{{ m.id }}" data-initial-status="{{ m.status }}">
         <div class="match-card-top">
-          <span class="pill pill-live">● LIVE — {{ m.minute }}'</span>
+          <span class="pill pill-live js-match-status">● LIVE — {{ m.minute }}'</span>
           <span class="match-week">MW {{ m.matchweek }}</span>
         </div>
         <div class="match-teams">
@@ -53,9 +53,9 @@
   <div class="tab-panel" id="panel-upcoming">
     <div class="matches-grid">
       {% for m in upcoming %}
-      <div class="match-card glass hover-lift">
+      <div class="match-card glass hover-lift js-match-card" data-match-id="{{ m.id }}" data-initial-status="{{ m.status }}">
         <div class="match-card-top">
-          <span class="pill pill-upcoming">Upcoming</span>
+          <span class="pill pill-upcoming js-match-status">Upcoming</span>
           <span class="match-week">MW {{ m.matchweek }}</span>
         </div>
         <div class="match-teams">
@@ -130,9 +130,9 @@
         </div>
         <div class="matches-grid">
           {% for m in bracket[stage_key] %}
-          <div class="match-card glass hover-lift">
+          <div class="match-card glass hover-lift js-match-card" data-match-id="{{ m.id }}" data-initial-status="{{ m.status }}">
             <div class="match-card-top">
-              <span class="pill {{ 'pill-live' if m.status == 'live' else 'pill-finished' if m.status == 'finished' else 'pill-upcoming' }}">
+              <span class="pill {{ 'pill-live' if m.status == 'live' else 'pill-finished' if m.status == 'finished' else 'pill-upcoming' }} js-match-status">
                 {% if m.status == 'live' %}● LIVE — {{ m.minute }}'{% elif m.status == 'finished' %}Full Time{% else %}Upcoming{% endif %}
               </span>
             </div>

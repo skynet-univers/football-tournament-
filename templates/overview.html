@@ -32,9 +32,9 @@
   </div>
 
   {% if next_match %}
-  <div class="featured-card glass {{ 'featured-card--live' if next_match.status == 'live' }}">
+  <div id="featured-match" class="featured-card glass {{ 'featured-card--live' if next_match.status == 'live' }}" data-match-id="{{ next_match.id }}" data-initial-status="{{ next_match.status }}">
     <div class="featured-top">
-      <span class="pill {{ 'pill-live' if next_match.status == 'live' else 'pill-upcoming' }}">
+      <span id="featured-status" class="pill {{ 'pill-live' if next_match.status == 'live' else 'pill-upcoming' }}">
         {% if next_match.status == 'live' %}<span class="live-dot"></span> LIVE — {{ next_match.minute }}'{% else %}Matchweek {{ next_match.matchweek }}{% endif %}
       </span>
       <span class="featured-meta">📍 {{ next_match.stadium }}</span>

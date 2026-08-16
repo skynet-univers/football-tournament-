@@ -46,6 +46,29 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 
+def _run_startup_migrations():
+    """Add any match-timing/penalty columns missing from an already-deployed
+    database. Safe no-op if the DB isn't reachable yet (e.g. before the
+    first `python init_db.py` run) — it just skips silently in that case."""
+    try:
+        from init_db import migrate_schema
+        if USE_POSTGRES:
+            conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        else:
+            if not os.path.exists(DB_PATH):
+                return
+            conn = sqlite3.connect(DB_PATH)
+        try:
+            migrate_schema(conn, postgres=USE_POSTGRES)
+        finally:
+            conn.close()
+    except Exception as exc:  # pragma: no cover - defensive startup guard
+        print(f"Schema migration skipped: {exc}")
+
+
+_run_startup_migrations()
+
+
 STAGES = ["league", "round_of_16", "quarterfinal", "semifinal", "final"]
 STAGE_LABELS = {
     "league": "League Stage",
@@ -96,6 +119,34 @@ def close_db(exception=None):
         db.close()
 
 
+@app.before_request
+def _auto_progress_live_matches():
+    """Flip 'live' matches to 'finished' once their configured duration
+    (including any extra time) has fully elapsed, so full time arrives
+    automatically without the admin having to edit the match. Everything
+    in between (half time, second half, extra time) is computed on the
+    fly in compute_live_phase() and never needs a DB write."""
+    try:
+        live_rows = query_all("SELECT * FROM matches WHERE status = 'live'")
+        if not live_rows:
+            return
+        teams = get_all_teams()
+    except Exception:
+        # Database not ready yet (e.g. before the first init_db.py run).
+        return
+
+    db = None
+    for m in live_rows:
+        fm = format_match(m, teams)
+        if fm is None:
+            continue
+        if fm["phase"] == "finished":
+            db = get_db()
+            db_execute(db, "UPDATE matches SET status = 'finished' WHERE id = ?", (m["id"],))
+    if db is not None:
+        db.commit()
+
+
 def _adapt_sql(sql):
     """Convert SQLite ? placeholders to PostgreSQL %s placeholders."""
     return sql.replace("?", "%s") if USE_POSTGRES else sql
@@ -103,10 +154,12 @@ def _adapt_sql(sql):
 
 def db_execute(db, sql, params=()):
     """Execute SQL on either PostgreSQL or SQLite."""
+
     if USE_POSTGRES:
         cur = db.cursor(cursor_factory=RealDictCursor)
         cur.execute(_adapt_sql(sql), params)
         return cur
+
     return db.execute(sql, params)
 
 
@@ -126,6 +179,146 @@ def query_one(sql, params=()):
     if USE_POSTGRES:
         cur.close()
     return row
+
+
+def get_team_possession():
+    rows = query_all(
+        "SELECT short_name, initials, primary_color, avg_possession FROM teams "
+        "ORDER BY avg_possession DESC"
+    )
+    return rows
+
+
+# ----------------------------------------------------------------------
+# Routes
+# ----------------------------------------------------------------------
+@app.route("/")
+def overview():
+    next_match = get_next_match()
+    latest_results = get_latest_results(limit=4)
+    standings = compute_standings()[:5]  # mini table preview
+    return render_template(
+        "overview.html",
+        active_page="overview",
+        next_match=next_match,
+        latest_results=latest_results,
+        standings=standings,
+        now=datetime.now(),
+    )
+
+
+@app.route("/matches")
+def matches():
+    upcoming = get_matches_by_status("upcoming")
+    live = get_matches_by_status("live")
+    finished = get_matches_by_status("finished")
+    finished.sort(key=lambda m: m["datetime"], reverse=True)
+    bracket = get_knockout_bracket()
+    return render_template(
+        "matches.html",
+        active_page="matches",
+        upcoming=upcoming,
+        live=live,
+        finished=finished,
+        bracket=bracket,
+        stage_labels=STAGE_LABELS,
+    )
+
+
+@app.route("/table")
+def table():
+    standings = compute_standings()
+    return render_template(
+        "table.html",
+        active_page="table",
+        standings=standings,
+    )
+
+
+@app.route("/stats")
+def stats():
+    return render_template(
+        "stats.html",
+        active_page="stats",
+        top_scorers=get_top_scorers(),
+        top_assists=get_top_assists(),
+        top_clean_sheets=get_top_clean_sheets(),
+        team_goals=get_team_goal_totals(),
+        team_wins=get_team_win_totals(),
+        team_possession=get_team_possession(),
+        discipline=get_discipline(),
+    )
+
+
+@app.route("/api/countdown")
+def api_countdown():
+    """Returns ISO datetime of the next match, for the JS countdown widget."""
+    next_match = get_next_match()
+    if not next_match:
+        return jsonify({"has_match": False})
+    return jsonify({
+        "has_match": True,
+        "datetime": next_match["datetime"].isoformat(),
+        "status": next_match["status"],
+        "home": next_match["home"]["short_name"],
+        "away": next_match["away"]["short_name"],
+    })
+
+
+@app.route("/api/match-statuses")
+def api_match_statuses():
+    """Returns live status/phase for every upcoming or live match, used by
+    the JS poller (main.js: initLiveMatchSync) to update live minutes
+    without a full page reload, and to trigger a reload when a match
+    changes tab (e.g. moves to Finished)."""
+    teams = get_all_teams()
+    rows = query_all(
+        "SELECT * FROM matches WHERE status IN ('live', 'upcoming') ORDER BY match_datetime ASC"
+    )
+    matches_payload = []
+    for m in rows:
+        fm = format_match(m, teams)
+        if fm is None:
+            continue
+        label = fm["minute"] if fm["status"] == "live" and fm["phase"] not in ("halftime", "extra_time_halftime") else None
+        matches_payload.append({
+            "id": fm["id"],
+            "status": fm["status"],
+            "phase": fm["phase"],
+            "label": f"{label}'" if label else "",
+        })
+    return jsonify({"matches": matches_payload})
+
+
+# ----------------------------------------------------------------------
+# Admin panel
+# ----------------------------------------------------------------------
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = None
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == ADMIN_PASSWORD:
+            session["is_admin"] = True
+            next_url = request.args.get("next") or url_for("admin_dashboard")
+            return redirect(next_url)
+        error = "Incorrect password."
+    return render_template("admin_login.html", error=error)
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("is_admin", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin")
+@login_required
+def admin_dashboard():
+    teams = get_all_teams()
+    all_matches = get_matches_by_status(stage=None)  # every stage, sorted by date asc
+    all_matches.sort(key=lambda m: m["datetime"], reverse=True)
+    return render_template("admin_dashboard.html", teams=teams, matches=all_matches)
 
 
 # ----------------------------------------------------------------------
@@ -175,35 +368,23 @@ def compute_standings():
         stats[a]["ga"] += hs
 
         if hs > as_:
-            # Normal home win
             stats[h]["won"] += 1
             stats[a]["lost"] += 1
-
         elif hs < as_:
-            # Normal away win
             stats[a]["won"] += 1
             stats[h]["lost"] += 1
-
         else:
-            # Match was level after normal time.
-            # If there is a penalty winner, give 3 points
-            # to that team and 0 to the other team.
-            penalty_winner = (
-                m["penalty_winner_team_id"]
-                if "penalty_winner_team_id" in m.keys()
-                else None
-            )
-
-            if penalty_winner == h:
+            # Scoreline is level. If a penalty shootout winner was recorded,
+            # that winner takes a normal win's 3 points and the loser gets 0
+            # (existing league rule) — otherwise it's a standard 1-point draw.
+            penalty_winner_side = m["penalty_winner_side"]
+            if penalty_winner_side == "home":
                 stats[h]["won"] += 1
                 stats[a]["lost"] += 1
-
-            elif penalty_winner == a:
+            elif penalty_winner_side == "away":
                 stats[a]["won"] += 1
                 stats[h]["lost"] += 1
-
             else:
-                # Genuine draw: 1 point each
                 stats[h]["draw"] += 1
                 stats[a]["draw"] += 1
 
@@ -229,20 +410,18 @@ def format_match(m, teams):
     if home is None or away is None:return None
     dt = datetime.strptime(m["match_datetime"], "%Y-%m-%d %H:%M")
 
-    # A match is a "draw" once it's finished with equal scores. Penalties
-    # (knockout stages) may then optionally decide a winner on top of that.
-    penalty_winner_team_id = m["penalty_winner_team_id"] if "penalty_winner_team_id" in m.keys() else None
-    penalty_home_score = m["penalty_home_score"] if "penalty_home_score" in m.keys() else None
-    penalty_away_score = m["penalty_away_score"] if "penalty_away_score" in m.keys() else None
-    is_draw = (
-        m["status"] == "finished"
-        and m["home_score"] is not None
-        and m["away_score"] is not None
-        and m["home_score"] == m["away_score"]
-    )
-    penalty_winner = teams.get(penalty_winner_team_id) if penalty_winner_team_id else None
+    home_score = m["home_score"]
+    away_score = m["away_score"]
+    is_draw = home_score is not None and away_score is not None and home_score == away_score
 
-    return {
+    penalty_winner_side = m["penalty_winner_side"]
+    penalty_winner = None
+    if is_draw and penalty_winner_side == "home":
+        penalty_winner = home
+    elif is_draw and penalty_winner_side == "away":
+        penalty_winner = away
+
+    match = {
         "id": m["id"],
         "home": home,
         "away": away,
@@ -254,16 +433,115 @@ def format_match(m, teams):
         "stage": m["stage"],
         "stage_label": STAGE_LABELS.get(m["stage"], m["stage"]),
         "status": m["status"],
-        "home_score": m["home_score"],
-        "away_score": m["away_score"],
+        "home_score": home_score,
+        "away_score": away_score,
         "minute": m["minute"],
-        "match_duration": m["match_duration"],
         "is_draw": is_draw,
-        "penalty_winner_team_id": penalty_winner_team_id,
-        "penalty_home_score": penalty_home_score,
-        "penalty_away_score": penalty_away_score,
         "penalty_winner": penalty_winner,
+        "penalty_home_score": m["penalty_home_score"],
+        "penalty_away_score": m["penalty_away_score"],
+        "match_duration": m["match_duration"],
+        "first_half_injury": m["first_half_injury"],
+        "second_half_injury": m["second_half_injury"],
+        "halftime_break": m["halftime_break"],
+        "extra_time": m["extra_time"],
+        "extra_time_break": m["extra_time_break"],
+        "extra_time_first_half_injury": m["extra_time_first_half_injury"],
+        "extra_time_second_half_injury": m["extra_time_second_half_injury"],
     }
+
+    if match["status"] == "live":
+        phase, minute_label = compute_live_phase(match)
+        match["phase"] = phase
+        if minute_label:
+            match["minute"] = minute_label
+        elif phase in ("halftime", "extra_time_halftime"):
+            match["minute"] = "HT"
+    else:
+        match["phase"] = match["status"]
+
+    return match
+
+
+def compute_live_phase(match):
+    """Compute the current phase of a live match purely from the kickoff
+    time (match_datetime) and the admin-configured durations — no manual
+    minute-by-minute updates required.
+
+    Returns (phase, minute_label):
+      phase is one of "first_half", "halftime", "second_half",
+      "extra_time_first_half", "extra_time_halftime",
+      "extra_time_second_half", "finished".
+      minute_label is a display string like "23" or "45+2" (no trailing
+      apostrophe), or None for breaks (halftime) where no minute is shown.
+    """
+    duration = match.get("match_duration")
+    if not duration:
+        # No duration configured yet — nothing to compute against.
+        return "first_half", None
+
+    half = duration / 2.0
+    fh_injury = match.get("first_half_injury") or 0
+    sh_injury = match.get("second_half_injury") or 0
+    ht_break = match.get("halftime_break")
+    if ht_break is None:
+        ht_break = 10
+    et_total = match.get("extra_time") or 0
+    et_half = et_total / 2.0
+    et_break = match.get("extra_time_break") or 0
+    et_fh_injury = match.get("extra_time_first_half_injury") or 0
+    et_sh_injury = match.get("extra_time_second_half_injury") or 0
+
+    elapsed = (datetime.now() - match["datetime"]).total_seconds() / 60.0
+    if elapsed < 0:
+        elapsed = 0
+
+    def minute_label_for(base_minutes, played, regulation_length):
+        """played = minutes played so far in this period. Once `played`
+        exceeds the period's regulation length, switch to "45+2" style
+        injury-time display."""
+        if played <= regulation_length:
+            return str(int(base_minutes + played) + 1)
+        extra = played - regulation_length
+        return f"{int(base_minutes + regulation_length)}+{int(extra) + 1}"
+
+    # First half (regulation + its injury time)
+    period = half + fh_injury
+    if elapsed < period:
+        return "first_half", minute_label_for(0, elapsed, half)
+    elapsed -= period
+
+    # Half-time break
+    if elapsed < ht_break:
+        return "halftime", None
+    elapsed -= ht_break
+
+    # Second half (regulation + its injury time)
+    period = half + sh_injury
+    if elapsed < period:
+        return "second_half", minute_label_for(half, elapsed, half)
+    elapsed -= period
+
+    if et_total <= 0:
+        return "finished", None
+
+    # Extra time, first half
+    period = et_half + et_fh_injury
+    if elapsed < period:
+        return "extra_time_first_half", minute_label_for(duration, elapsed, et_half)
+    elapsed -= period
+
+    # Extra time, half-time break
+    if elapsed < et_break:
+        return "extra_time_halftime", None
+    elapsed -= et_break
+
+    # Extra time, second half
+    period = et_half + et_sh_injury
+    if elapsed < period:
+        return "extra_time_second_half", minute_label_for(duration + et_half, elapsed, et_half)
+
+    return "finished", None
 
 
 def get_matches_by_status(status=None, stage="league"):
@@ -380,121 +658,6 @@ def get_team_win_totals():
     return ranked
 
 
-def get_team_possession():
-    rows = query_all(
-        "SELECT short_name, initials, primary_color, avg_possession FROM teams "
-        "ORDER BY avg_possession DESC"
-    )
-    return rows
-
-
-# ----------------------------------------------------------------------
-# Routes
-# ----------------------------------------------------------------------
-@app.route("/")
-def overview():
-    next_match = get_next_match()
-    latest_results = get_latest_results(limit=4)
-    standings = compute_standings()[:5]  # mini table preview
-    return render_template(
-        "overview.html",
-        active_page="overview",
-        next_match=next_match,
-        latest_results=latest_results,
-        standings=standings,
-        now=datetime.now(),
-    )
-
-
-@app.route("/matches")
-def matches():
-    upcoming = get_matches_by_status("upcoming")
-    live = get_matches_by_status("live")
-    finished = get_matches_by_status("finished")
-    finished.sort(key=lambda m: m["datetime"], reverse=True)
-    bracket = get_knockout_bracket()
-    return render_template(
-        "matches.html",
-        active_page="matches",
-        upcoming=upcoming,
-        live=live,
-        finished=finished,
-        bracket=bracket,
-        stage_labels=STAGE_LABELS,
-    )
-
-
-@app.route("/table")
-def table():
-    standings = compute_standings()
-    return render_template(
-        "table.html",
-        active_page="table",
-        standings=standings,
-    )
-
-
-@app.route("/stats")
-def stats():
-    return render_template(
-        "stats.html",
-        active_page="stats",
-        top_scorers=get_top_scorers(),
-        top_assists=get_top_assists(),
-        top_clean_sheets=get_top_clean_sheets(),
-        team_goals=get_team_goal_totals(),
-        team_wins=get_team_win_totals(),
-        team_possession=get_team_possession(),
-        discipline=get_discipline(),
-    )
-
-
-@app.route("/api/countdown")
-def api_countdown():
-    """Returns ISO datetime of the next match, for the JS countdown widget."""
-    next_match = get_next_match()
-    if not next_match:
-        return jsonify({"has_match": False})
-    return jsonify({
-        "has_match": True,
-        "datetime": next_match["datetime"].isoformat(),
-        "status": next_match["status"],
-        "home": next_match["home"]["short_name"],
-        "away": next_match["away"]["short_name"],
-    })
-
-
-# ----------------------------------------------------------------------
-# Admin panel
-# ----------------------------------------------------------------------
-@app.route("/admin/login", methods=["GET", "POST"])
-def admin_login():
-    error = None
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        if password == ADMIN_PASSWORD:
-            session["is_admin"] = True
-            next_url = request.args.get("next") or url_for("admin_dashboard")
-            return redirect(next_url)
-        error = "Incorrect password."
-    return render_template("admin_login.html", error=error)
-
-
-@app.route("/admin/logout")
-def admin_logout():
-    session.pop("is_admin", None)
-    return redirect(url_for("admin_login"))
-
-
-@app.route("/admin")
-@login_required
-def admin_dashboard():
-    teams = get_all_teams()
-    all_matches = get_matches_by_status(stage=None)  # every stage, sorted by date asc
-    all_matches.sort(key=lambda m: m["datetime"], reverse=True)
-    return render_template("admin_dashboard.html", teams=teams, matches=all_matches)
-
-
 def _match_form_to_db(form):
     """Extract + validate match fields from a submitted form."""
     home_id = form.get("home_team_id")
@@ -502,35 +665,13 @@ def _match_form_to_db(form):
     match_date = form.get("match_date")
     match_time = form.get("match_time")
     stadium = form.get("stadium", "").strip()
-    matchweek = form.get("matchweek") or 1
     stage = form.get("stage", "league")
     status = form.get("status", "upcoming")
     home_score = form.get("home_score") or None
     away_score = form.get("away_score") or None
     minute = form.get("minute") or None
-    match_duration = form.get("match_duration") or 90
-
-    # Penalty shootout fields — only meaningful when the match ends level,
-    # but the winner is never required (draw is a perfectly valid result).
-    penalty_winner_side = form.get("penalty_winner") or ""  # "", "home", "away"
-    penalty_home_score = form.get("penalty_home_score") or None
-    penalty_away_score = form.get("penalty_away_score") or None
 
     errors = []
-    try:
-        match_duration = int(match_duration)
-        if match_duration <= 0:
-            errors.append("Match duration must be greater than 0.")
-    except ValueError:
-        match_duration = 90
-        errors.append("Match duration must be a number.")
-
-    try:
-        matchweek = int(matchweek)
-    except ValueError:
-        matchweek = 1
-        errors.append("Matchweek must be a number.")
-
     if not home_id or not away_id:
         errors.append("Please select both teams.")
     elif home_id == away_id:
@@ -541,28 +682,46 @@ def _match_form_to_db(form):
         errors.append("Stadium is required.")
     if stage not in STAGES:
         errors.append("Invalid stage selected.")
-    if penalty_winner_side not in ("", "home", "away"):
-        errors.append("Invalid penalty winner selection.")
+    try:
+        matchweek = int(form.get("matchweek") or 1)
+    except ValueError:
+        matchweek = 1
+        errors.append("Matchweek must be a number.")
+
+    # Match Duration is required — there is no automatic 90-minute default.
+    try:
+        match_duration = int(form.get("match_duration"))
+        if match_duration < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        match_duration = None
+        errors.append("Match Duration is required (in minutes).")
+
+    def _opt_int(field, default=0):
+        val = form.get(field)
+        if val in (None, ""):
+            return default
+        try:
+            return int(val)
+        except ValueError:
+            return default
+
+    first_half_injury = _opt_int("first_half_injury", 0)
+    second_half_injury = _opt_int("second_half_injury", 0)
+    halftime_break = _opt_int("halftime_break", 10)
+    extra_time = _opt_int("extra_time", 0)
+    extra_time_break = _opt_int("extra_time_break", 10)
+    extra_time_first_half_injury = _opt_int("extra_time_first_half_injury", 0)
+    extra_time_second_half_injury = _opt_int("extra_time_second_half_injury", 0)
+
+    penalty_winner_side = form.get("penalty_winner") or None
+    if penalty_winner_side not in (None, "home", "away"):
+        penalty_winner_side = None
+    penalty_home_score = form.get("penalty_home_score") or None
+    penalty_away_score = form.get("penalty_away_score") or None
 
     if errors:
         return None, errors
-
-    # Resolve the penalty winner side to an actual team id (or None).
-    if penalty_winner_side == "home":
-        penalty_winner_team_id = home_id
-    elif penalty_winner_side == "away":
-        penalty_winner_team_id = away_id
-    else:
-        penalty_winner_team_id = None
-
-    try:
-        penalty_home_score = int(penalty_home_score) if penalty_home_score is not None else None
-    except ValueError:
-        penalty_home_score = None
-    try:
-        penalty_away_score = int(penalty_away_score) if penalty_away_score is not None else None
-    except ValueError:
-        penalty_away_score = None
 
     dt_str = f"{match_date} {match_time}"
     return {
@@ -577,7 +736,14 @@ def _match_form_to_db(form):
         "away_score": away_score,
         "minute": minute,
         "match_duration": match_duration,
-        "penalty_winner_team_id": penalty_winner_team_id,
+        "first_half_injury": first_half_injury,
+        "second_half_injury": second_half_injury,
+        "halftime_break": halftime_break,
+        "extra_time": extra_time,
+        "extra_time_break": extra_time_break,
+        "extra_time_first_half_injury": extra_time_first_half_injury,
+        "extra_time_second_half_injury": extra_time_second_half_injury,
+        "penalty_winner_side": penalty_winner_side,
         "penalty_home_score": penalty_home_score,
         "penalty_away_score": penalty_away_score,
     }, None
@@ -595,30 +761,21 @@ def admin_add_match():
         else:
             db = get_db()
             db_execute(db, 
-    """INSERT INTO matches (
-           home_team_id, away_team_id, match_datetime,
-           stadium, matchweek, stage, status,
-           home_score, away_score, minute, match_duration,
-           penalty_winner_team_id, penalty_home_score, penalty_away_score
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-    (
-        data["home_team_id"],
-        data["away_team_id"],
-        data["match_datetime"],
-        data["stadium"],
-        data["matchweek"],
-        data["stage"],
-        data["status"],
-        data["home_score"],
-        data["away_score"],
-        data["minute"],
-        data["match_duration"],
-        data["penalty_winner_team_id"],
-        data["penalty_home_score"],
-        data["penalty_away_score"],
-    ),
-)
+                """INSERT INTO matches (home_team_id, away_team_id, match_datetime,
+                       stadium, matchweek, stage, status, home_score, away_score, minute,
+                       match_duration, first_half_injury, second_half_injury, halftime_break,
+                       extra_time, extra_time_break, extra_time_first_half_injury,
+                       extra_time_second_half_injury, penalty_winner_side,
+                       penalty_home_score, penalty_away_score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (data["home_team_id"], data["away_team_id"], data["match_datetime"],
+                 data["stadium"], data["matchweek"], data["stage"], data["status"],
+                 data["home_score"], data["away_score"], data["minute"],
+                 data["match_duration"], data["first_half_injury"], data["second_half_injury"],
+                 data["halftime_break"], data["extra_time"], data["extra_time_break"],
+                 data["extra_time_first_half_injury"], data["extra_time_second_half_injury"],
+                 data["penalty_winner_side"], data["penalty_home_score"], data["penalty_away_score"]),
+            )
             db.commit()
             flash("Match added successfully.", "success")
             return redirect(url_for("admin_dashboard"))
@@ -643,40 +800,22 @@ def admin_edit_match(match_id):
         else:
             db = get_db()
             db_execute(db, 
-    """UPDATE matches SET
-           home_team_id=?,
-           away_team_id=?,
-           match_datetime=?,
-           stadium=?,
-           matchweek=?,
-           stage=?,
-           status=?,
-           home_score=?,
-           away_score=?,
-           minute=?,
-           match_duration=?,
-           penalty_winner_team_id=?,
-           penalty_home_score=?,
-           penalty_away_score=?
-       WHERE id=?""",
-    (
-        data["home_team_id"],
-        data["away_team_id"],
-        data["match_datetime"],
-        data["stadium"],
-        data["matchweek"],
-        data["stage"],
-        data["status"],
-        data["home_score"],
-        data["away_score"],
-        data["minute"],
-        data["match_duration"],
-        data["penalty_winner_team_id"],
-        data["penalty_home_score"],
-        data["penalty_away_score"],
-        match_id,
-    ),
-)
+                """UPDATE matches SET home_team_id=?, away_team_id=?, match_datetime=?,
+                       stadium=?, matchweek=?, stage=?, status=?, home_score=?, away_score=?, minute=?,
+                       match_duration=?, first_half_injury=?, second_half_injury=?, halftime_break=?,
+                       extra_time=?, extra_time_break=?, extra_time_first_half_injury=?,
+                       extra_time_second_half_injury=?, penalty_winner_side=?,
+                       penalty_home_score=?, penalty_away_score=?
+                   WHERE id=?""",
+                (data["home_team_id"], data["away_team_id"], data["match_datetime"],
+                 data["stadium"], data["matchweek"], data["stage"], data["status"],
+                 data["home_score"], data["away_score"], data["minute"],
+                 data["match_duration"], data["first_half_injury"], data["second_half_injury"],
+                 data["halftime_break"], data["extra_time"], data["extra_time_break"],
+                 data["extra_time_first_half_injury"], data["extra_time_second_half_injury"],
+                 data["penalty_winner_side"], data["penalty_home_score"], data["penalty_away_score"],
+                 match_id),
+            )
             db.commit()
             flash("Match updated successfully.", "success")
             return redirect(url_for("admin_dashboard"))
@@ -685,12 +824,6 @@ def admin_edit_match(match_id):
     match = dict(row)
     match["date_part"] = dt.strftime("%Y-%m-%d")
     match["time_part"] = dt.strftime("%H:%M")
-    if match.get("penalty_winner_team_id") == match.get("home_team_id") and match.get("penalty_winner_team_id"):
-        match["penalty_winner_side"] = "home"
-    elif match.get("penalty_winner_team_id") == match.get("away_team_id") and match.get("penalty_winner_team_id"):
-        match["penalty_winner_side"] = "away"
-    else:
-        match["penalty_winner_side"] = ""
     return render_template("admin_match_form.html", teams=teams, match=match, action="Edit")
 
 

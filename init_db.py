@@ -37,6 +37,47 @@ def create_sqlite_connection():
     return conn
 
 
+# Match-timing + penalty-shootout columns that may be missing from an
+# already-deployed database. Each entry is (column_name, sql_type).
+# migrate_schema() adds any of these that don't already exist, without
+# ever dropping or recreating tables/data.
+MATCH_TIMING_COLUMNS = [
+    ("match_duration", "INTEGER"),
+    ("first_half_injury", "INTEGER DEFAULT 0"),
+    ("second_half_injury", "INTEGER DEFAULT 0"),
+    ("halftime_break", "INTEGER DEFAULT 10"),
+    ("extra_time", "INTEGER DEFAULT 0"),
+    ("extra_time_break", "INTEGER DEFAULT 10"),
+    ("extra_time_first_half_injury", "INTEGER DEFAULT 0"),
+    ("extra_time_second_half_injury", "INTEGER DEFAULT 0"),
+    ("penalty_winner_side", "TEXT"),
+    ("penalty_home_score", "INTEGER"),
+    ("penalty_away_score", "INTEGER"),
+]
+
+
+def migrate_schema(conn, postgres=False):
+    """Safely add any missing match-timing / penalty-shootout columns to
+    the existing `matches` table. Never drops or recreates a table and
+    never touches existing rows — only adds columns that aren't there yet.
+    Safe to call every time the app starts.
+    """
+    cur = conn.cursor()
+
+    if postgres:
+        for col, coltype in MATCH_TIMING_COLUMNS:
+            cur.execute(f"ALTER TABLE matches ADD COLUMN IF NOT EXISTS {col} {coltype}")
+    else:
+        cur.execute("PRAGMA table_info(matches)")
+        existing = {row[1] for row in cur.fetchall()}
+        for col, coltype in MATCH_TIMING_COLUMNS:
+            if col not in existing:
+                cur.execute(f"ALTER TABLE matches ADD COLUMN {col} {coltype}")
+
+    conn.commit()
+    cur.close()
+
+
 def create_schema(conn, postgres=False):
     """Create all tables required by the application."""
     cur = conn.cursor()
@@ -70,10 +111,6 @@ def create_schema(conn, postgres=False):
                 home_score INTEGER,
                 away_score INTEGER,
                 minute INTEGER,
-                match_duration INTEGER NOT NULL
-                DEFAULT 90,
-                extra_time INTEGER NOT NULL
-                DEFAULT 0,
                 FOREIGN KEY (home_team_id) REFERENCES teams (id),
                 FOREIGN KEY (away_team_id) REFERENCES teams (id)
             )
@@ -170,6 +207,7 @@ def main():
         conn = create_postgres_connection()
         try:
             create_schema(conn, postgres=True)
+            migrate_schema(conn, postgres=True)
         finally:
             conn.close()
         print("Supabase database schema is ready.")
@@ -178,6 +216,7 @@ def main():
         conn = create_sqlite_connection()
         try:
             create_schema(conn, postgres=False)
+            migrate_schema(conn, postgres=False)
         finally:
             conn.close()
         print("Local SQLite database schema is ready.")
